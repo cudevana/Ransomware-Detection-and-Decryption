@@ -1,0 +1,121 @@
+#include <windows.h>
+#include <tchar.h>
+#include <stdio.h>
+#include "fileSystemWatcher.h"
+#include "registryMonitor.h"
+#include "vssadminDetector.h"
+#include "threadData.h"
+#include "myTimeLibrary.h"
+
+MTL mtl;
+VD vd;
+RM rm;
+FSW fws;
+LPCSTR user_input()
+{
+
+	char *buf = (char *)malloc(sizeof(char) * 100);
+
+	scanf_s("%s", buf, 100);
+
+	return (LPCSTR)buf;
+}
+
+//void main(int argc, char *argv[])
+int _tmain(int argc, TCHAR *argv[])
+{
+
+	HANDLE hThread_file_sytem_watcher, hThread_registry_monitor, hThread_vssadmin_detector;
+
+	PMYDATA pData_vssadmin_detector, pData_registry_monitor, pData_file_sytem_watcher;
+
+	pData_vssadmin_detector = (PMYDATA)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(MYDATA));
+	pData_registry_monitor = (PMYDATA)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(MYDATA));
+	pData_file_sytem_watcher = (PMYDATA)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(MYDATA));
+
+	printf("Process to be checked: vssadmin.exe\n");
+	pData_vssadmin_detector->path = "vssadmin.exe"; //VSSAdmin process
+
+	printf("\nEnter the path of folder to monitor:\n");
+	pData_file_sytem_watcher->path = user_input();
+
+	printf("\nRegistry to be monitored: HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\n");
+	pData_registry_monitor->path = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"; //Registry path to monitor
+
+	//initialising last_successful values so that they are greater than maximum time to get infected
+	pData_vssadmin_detector->last_sucessful = mtl.get_current_time() - MAX_TIME_TO_GET_INFECTED;
+	pData_file_sytem_watcher->last_sucessful = mtl.get_current_time() - 3 * MAX_TIME_TO_GET_INFECTED;
+	pData_registry_monitor->last_sucessful = mtl.get_current_time() - 5 * MAX_TIME_TO_GET_INFECTED;
+
+	bool ransomware_detected = false;
+
+	pData_vssadmin_detector->detected = pData_file_sytem_watcher->detected = pData_registry_monitor->detected = &ransomware_detected;
+
+	DWORD dwThreadId1, dwThreadId2, dwThreadId3;
+
+	hThread_vssadmin_detector = CreateThread(
+		NULL,					 // default security attributes
+		0,						 // use default stack size
+		vd.vssadmin_detector,	 // thread function name
+		pData_vssadmin_detector, // argument to thread function
+		0,						 // use default creation flags
+		&dwThreadId1);			 // returns the thread identifier
+
+	hThread_file_sytem_watcher = CreateThread(
+		NULL,					  // default security attributes
+		0,						  // use default stack size
+		fws.Watcher,			  // thread function name
+		pData_file_sytem_watcher, // argument to thread function
+		0,						  // use default creation flags
+		&dwThreadId2);			  // returns the thread identifier
+
+	hThread_registry_monitor = CreateThread(
+		NULL,					// default security attributes
+		0,						// use default stack size
+		rm.registry_monitor,	// thread function name
+		pData_registry_monitor, // argument to thread function
+		0,						// use default creation flags
+		&dwThreadId3);			// returns the thread identifier
+
+	printf("\nRANSOMWARE DETECTION HAS STARTED:\n");
+
+	while (ransomware_detected == false)
+	{
+
+		if (abs(pData_vssadmin_detector->last_sucessful - pData_file_sytem_watcher->last_sucessful) <= MAX_TIME_TO_GET_INFECTED)
+			ransomware_detected = true;
+
+		if (abs(pData_vssadmin_detector->last_sucessful - pData_registry_monitor->last_sucessful) <= MAX_TIME_TO_GET_INFECTED)
+			ransomware_detected = true;
+
+		if (abs(pData_registry_monitor->last_sucessful - pData_file_sytem_watcher->last_sucessful) <= MAX_TIME_TO_GET_INFECTED)
+			ransomware_detected = true;
+	}
+
+	CloseHandle(hThread_vssadmin_detector);
+	if (pData_vssadmin_detector != NULL)
+	{
+		HeapFree(GetProcessHeap(), 0, pData_vssadmin_detector);
+		pData_vssadmin_detector = NULL; // Ensure address is not reused.
+	}
+
+	CloseHandle(hThread_registry_monitor);
+	if (pData_registry_monitor != NULL)
+	{
+		HeapFree(GetProcessHeap(), 0, pData_registry_monitor);
+		pData_registry_monitor = NULL; // Ensure address is not reused.
+	}
+
+	CloseHandle(hThread_file_sytem_watcher);
+	if (pData_file_sytem_watcher != NULL)
+	{
+		HeapFree(GetProcessHeap(), 0, pData_file_sytem_watcher);
+		pData_file_sytem_watcher = NULL; // Ensure address is not reused.
+	}
+
+	printf("High possibility of a RANSOMWARE INFECTION!!!!\n");
+
+	getchar();
+	getchar();
+	return 0;
+}
